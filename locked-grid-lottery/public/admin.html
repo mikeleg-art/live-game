@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Locked Grid Lottery — Admin Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    document.write('<link rel="stylesheet" href="/admin.css' +
+      (window.location.search.indexOf('XTransformPort=') >= 0 ? window.location.search : '') + '" />');
+  </script>
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <div>
+        <h1>🔒 Locked Grid Lottery <span>admin</span></h1>
+        <p class="sub">Host control panel — reset rounds, release slots, drive simulations</p>
+      </div>
+      <div class="conn">
+        <span class="dot" id="conn-dot"></span><span id="conn-label">connecting…</span>
+      </div>
+    </header>
+
+    <!-- status strip -->
+    <section class="cards">
+      <div class="card">
+        <div class="k">MODE</div>
+        <div class="v" id="st-mode">—</div>
+        <div class="hint" id="st-mode-hint"></div>
+      </div>
+      <div class="card">
+        <div class="k">TIKTOK LIVE</div>
+        <div class="v" id="st-tiktok">—</div>
+        <div class="hint" id="st-tiktok-hint"></div>
+      </div>
+      <div class="card">
+        <div class="k">ROUND</div>
+        <div class="v" id="st-round">—</div>
+        <div class="hint" id="st-round-hint"></div>
+      </div>
+      <div class="card">
+        <div class="k">SIMULATOR</div>
+        <div class="v" id="st-sim">—</div>
+        <div class="hint">auto fake viewers</div>
+      </div>
+    </section>
+
+    <div class="columns">
+      <!-- left column -->
+      <div class="col">
+        <!-- grid mirror -->
+        <section class="panel">
+          <h2>Grid</h2>
+          <div id="grid" class="mini-grid"></div>
+          <div class="row-actions">
+            <button id="btn-draw" class="draw">🎯 Draw winner</button>
+            <button id="btn-reset" class="danger">🔄 Reset round</button>
+            <span class="key-hint">key: <input id="admin-key" type="password" placeholder="admin key" /></span>
+          </div>
+          <p class="note">Click a locked slot to release it. Draw winner rolls the keno among claimed slots; the game restarts itself after the celebration. Reset flushes every lock immediately.</p>
+        </section>
+
+        <!-- manual award -->
+        <section class="panel">
+          <h2>Manual award</h2>
+          <div class="form-row">
+            <input id="award-slot" type="number" min="1" max="10" placeholder="Slot #" />
+            <input id="award-user" type="text" placeholder="@username" />
+            <button id="btn-award">Award</button>
+          </div>
+          <p class="note">Awards a slot to a viewer (e.g. someone who commented on another platform).</p>
+        </section>
+
+        <!-- overlay ad -->
+        <section class="panel">
+          <h2>📣 Overlay ad</h2>
+          <div class="form-row">
+            <input id="ad-file" type="file" accept="image/*,video/mp4,video/webm,video/quicktime,.gif,.mp4,.webm,.mov" title="Pick an image, GIF or short video" />
+          </div>
+          <div class="form-row">
+            <input id="ad-url" type="url" placeholder="…or paste a media URL (https://…/ad.mp4)" />
+          </div>
+          <div class="form-row">
+            <input id="ad-duration" type="number" min="2" max="300" value="8" title="Seconds" />
+            <input id="ad-caption" type="text" placeholder="Caption (optional)" />
+          </div>
+          <div class="row-actions">
+            <button id="btn-ad-show">▶ Show ad on overlay</button>
+            <button id="btn-ad-stop" class="danger">■ Stop ad</button>
+          </div>
+          <p class="note">Send an image, animated GIF or short video (mp4/webm/mov) to every overlay. It pops up fullscreen and dismisses itself after the set seconds — videos also close when they finish. Max 48 MB per upload.</p>
+        </section>
+      </div>
+
+      <!-- right column -->
+      <div class="col">
+        <!-- winner history -->
+        <section class="panel">
+          <h2>🏆 Winner history</h2>
+          <div class="form-row winners-filters">
+            <input id="win-round" type="number" min="1" placeholder="Round #" title="Filter by round" />
+            <label class="date-field">from <input id="win-from" type="date" /></label>
+            <label class="date-field">to <input id="win-to" type="date" /></label>
+            <button id="btn-win-refresh">Apply</button>
+          </div>
+          <div class="form-row quick-row">
+            <button class="ghost" data-quick="today">Today</button>
+            <button class="ghost" data-quick="7d">Last 7 days</button>
+            <button class="ghost" data-quick="all">All time</button>
+            <span class="win-total" id="win-total"></span>
+          </div>
+          <div class="winners-table-wrap">
+            <table class="winners-table" id="winners-table">
+              <thead>
+                <tr><th>Round</th><th>#</th><th>Winner</th><th>When</th><th>By</th></tr>
+              </thead>
+              <tbody id="winners-body">
+                <tr class="empty"><td colspan="5">No winners yet — run a draw.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">Lists every crowned winner (persisted across restarts). Filter by round number and/or date range — the table refreshes itself after each draw.</p>
+        </section>
+
+        <!-- simulation -->
+        <section class="panel" id="sim-panel">
+          <h2>Simulation</h2>
+          <div class="form-row">
+            <label class="switch">
+              <input type="checkbox" id="sim-toggle" />
+              <span class="slider"></span>
+              <span class="switch-label">auto-sim viewers</span>
+            </label>
+          </div>
+          <div class="form-row">
+            <input id="inj-user" type="text" placeholder="username (optional)" />
+            <input id="inj-comment" type="text" placeholder="comment, e.g. 7" />
+            <button id="btn-inj-chat">Send chat</button>
+          </div>
+          <div class="form-row">
+            <input id="inj-gift-user" type="text" placeholder="username (optional)" />
+            <input id="inj-gift" type="text" placeholder="gift name" />
+            <input id="inj-gift-count" type="number" min="1" value="1" placeholder="x" />
+            <button id="btn-inj-gift">Send gift</button>
+          </div>
+          <p class="note">Injects synthetic chat/gift events through the same pipeline as real TikTok messages — perfect for rehearsing.</p>
+        </section>
+
+        <!-- event log -->
+        <section class="panel grow">
+          <h2>Event log</h2>
+          <div id="log" class="log"></div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="foot">
+      <span>Locked Grid Lottery v1.0</span>
+      <span id="foot-mode"></span>
+      <span>POST /api/reset — header <code>x-admin-key</code></span>
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      var q = window.location.search.indexOf('XTransformPort=') >= 0 ? window.location.search : '';
+      var s = document.createElement('script');
+      s.src = '/socket.io/socket.io.js' + q;
+      s.onload = function () {
+        var o = document.createElement('script');
+        o.src = '/admin.js' + q;
+        document.body.appendChild(o);
+      };
+      document.body.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

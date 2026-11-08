@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1080, initial-scale=1" />
+  <title>Locked Grid Lottery — OBS Overlay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet" />
+  <script>
+    /* Emit the stylesheet with the gateway query (if any) so the FIRST fetch is
+       already routed correctly — no 404 round-trip, no flash of unstyled content. */
+    document.write('<link rel="stylesheet" href="/overlay.css' +
+      (window.location.search.indexOf('XTransformPort=') >= 0 ? window.location.search : '') + '" />');
+  </script>
+</head>
+<body>
+  <div id="stage">
+
+    <!-- reconnect banner -->
+    <div id="reconnect-banner" class="hidden">⚠ CONNECTION LOST — RECONNECTING…</div>
+
+    <!-- round reset flash -->
+    <div id="round-flash" class="hidden">
+      <div class="round-flash-inner">
+        <div class="round-flash-label">NEW ROUND</div>
+        <div class="round-flash-num" id="round-flash-num">2</div>
+        <div class="round-flash-sub">TYPE A NUMBER TO CLAIM YOUR SLOT!</div>
+      </div>
+    </div>
+
+    <!-- ══ OVERLAY AD (image / gif / short video) ══ -->
+    <div id="ad-stage" class="hidden">
+      <div class="ad-backdrop"></div>
+      <div class="ad-card" id="ad-card">
+        <div class="ad-badge">📣 AD</div>
+        <div class="ad-media-wrap">
+          <img id="ad-image" class="hidden" alt="" referrerpolicy="no-referrer" />
+          <video id="ad-video" class="hidden" autoplay playsinline webkit-playsinline></video>
+        </div>
+        <div class="ad-caption hidden" id="ad-caption"></div>
+        <div class="ad-progress"><span id="ad-progress-bar"></span></div>
+      </div>
+    </div>
+
+    <!-- ══ WINNER DRAW (keno) STAGE ══ -->
+    <div id="draw-stage" class="hidden">
+      <div id="confetti"></div>
+      <div class="draw-inner">
+        <div class="draw-label" id="draw-label">🎯 DRAWING A WINNER</div>
+        <div class="keno-ball" id="keno-ball">
+          <div class="ball-face">
+            <div class="ball-number roll" id="draw-num">1</div>
+          </div>
+        </div>
+        <div class="draw-winner hidden" id="draw-winner">
+          <div class="draw-avatar-ring">
+            <img class="draw-avatar" alt="" referrerpolicy="no-referrer" />
+            <div class="draw-avatar-fallback"></div>
+          </div>
+          <div class="draw-username" id="draw-username">@winner</div>
+        </div>
+        <div class="draw-pool" id="draw-pool"></div>
+        <div class="draw-sub" id="draw-sub">GET READY…</div>
+      </div>
+    </div>
+
+    <!-- toast stack -->
+    <div id="toasts"></div>
+
+    <!-- ══ HEADER ══ -->
+    <header id="header">
+      <div class="header-top">
+        <div class="live-pill"><span class="live-dot"></span>LIVE</div>
+        <div class="round-chip">ROUND <b id="round-num">1</b></div>
+        <div class="stat-chip">⏱ <b id="round-timer">00:00</b></div>
+        <div class="stat-chip accent"><b id="slots-left">10</b> <span id="slots-left-label">SLOTS</span> LEFT</div>
+        <button id="sound-toggle" title="Toggle claim sound">🔇</button>
+      </div>
+      <h1 class="title">PICK A NUMBER <span class="gradient">1-10</span><span class="bang">!</span></h1>
+      <p class="subtitle">
+        <span class="sub-chip">💬 TYPE A NUMBER IN CHAT</span>
+        <span class="sub-chip">FIRST COME, FIRST SERVED</span>
+        <span class="sub-chip">ONE SLOT PER VIEWER</span>
+      </p>
+    </header>
+
+    <!-- ══ MAIN GRID ══ -->
+    <main id="grid"></main>
+
+    <!-- ══ ACTIVITY TICKER ══ -->
+    <div id="ticker">
+      <span class="ticker-label">📡</span>
+      <span id="ticker-text" class="ticker-text">Waiting for chat activity…</span>
+    </div>
+
+    <!-- ══ CLAIMED SLOTS FEED ══ -->
+    <section id="claimed">
+      <div class="claimed-header">
+        <span class="claimed-title">🏆 CLAIMED SLOTS</span>
+        <span class="claimed-count" id="claimed-count">0 / 10</span>
+      </div>
+      <div id="feed"></div>
+    </section>
+
+  </div>
+  <script>
+    /* Bootstrap: when served through a gateway (URL contains XTransformPort=...),
+       append the query to static asset URLs so the gateway routes them too. */
+    (function () {
+      var q = window.location.search.indexOf('XTransformPort=') >= 0 ? window.location.search : '';
+      var s = document.createElement('script');
+      s.src = '/socket.io/socket.io.js' + q;
+      s.onload = function () {
+        var o = document.createElement('script');
+        o.src = '/overlay.js' + q;
+        document.body.appendChild(o);
+      };
+      document.body.appendChild(s);
+    })();
+  </script>
+</body>
+</html>

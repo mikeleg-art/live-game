@@ -1,0 +1,572 @@
+     1→'use client';
+     2→
+     3→import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+     4→import { io, Socket } from 'socket.io-client';
+     5→import { Button } from '@/components/ui/button';
+     6→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+     7→import { Input } from '@/components/ui/input';
+     8→import { Badge } from '@/components/ui/badge';
+     9→import { Switch } from '@/components/ui/switch';
+    10→import { ScrollArea } from '@/components/ui/scroll-area';
+    11→import {
+    12→  Accordion,
+    13→  AccordionContent,
+    14→  AccordionItem,
+    15→  AccordionTrigger,
+    16→} from '@/components/ui/accordion';
+    17→import { Separator } from '@/components/ui/separator';
+    18→import { useToast } from '@/hooks/use-toast';
+    19→import {
+    20→  RotateCcw,
+    21→  FlaskConical,
+    22→  Radio,
+    23→  ExternalLink,
+    24→  Copy,
+    25→  Lock,
+    26→  Unlock,
+    27→  Gift,
+    28→  Timer,
+    29→  Users,
+    30→  Zap,
+    31→  Server,
+    32→  MonitorSmartphone,
+    33→} from 'lucide-react';
+    34→
+    35→/* ── types ──────────────────────────────────────────────────────────── */
+    36→type SlotEntry = {
+    37→  slot: number;
+    38→  locked?: boolean;
+    39→  userId?: string;
+    40→  uniqueId?: string;
+    41→  nickname?: string;
+    42→  profilePictureUrl?: string | null;
+    43→  lockedAt?: number;
+    44→};
+    45→type GameState = {
+    46→  round: number;
+    47→  roundStartedAt: number;
+    48→  totalSlots: number;
+    49→  claimedCount: number;
+    50→  slots: SlotEntry[];
+    51→  stats: { claims: number; rejectedTaken: number; rejectedDuplicate: number; gifts: number; resets: number };
+    52→  completedRounds: number;
+    53→};
+    54→type ServerInfo = {
+    55→  mode: 'LIVE' | 'SIMULATION';
+    56→  simulate: boolean;
+    57→  simulator: { enabled: boolean; active: boolean };
+    58→  tiktok: { username: string; status: string; configured: boolean; lastError: string | null };
+    59→  version: string;
+    60→};
+    61→type ActivityEvent = {
+    62→  id: string;
+    63→  type: string;
+    64→  at: number;
+    65→  slot?: number;
+    66→  user?: { uniqueId?: string; nickname?: string };
+    67→  giftName?: string;
+    68→  repeatCount?: number;
+    69→  comment?: string;
+    70→  round?: number;
+    71→  source?: string;
+    72→};
+    73→
+    74→const GAME_PORT = 3003;
+    75→const API = (path: string) => `/api/${path}${path.includes('?') ? '&' : '?'}XTransformPort=${GAME_PORT}`;
+    76→
+    77→const EVENT_ICONS: Record<string, string> = {
+    78→  claim: '🔒', rejected: '⌛', duplicate: '🙃', invalid: '❓', gift: '🎁',
+    79→  join: '👋', released: '🔓', 'grid-full': '🔥', reset: '🔄', chat: '💬',
+    80→};
+    81→
+    82→function describeEvent(ev: ActivityEvent): string {
+    83→  const u = `@${ev.user?.uniqueId || ev.user?.nickname || 'viewer'}`;
+    84→  switch (ev.type) {
+    85→    case 'claim': return `${u} locked slot #${ev.slot}`;
+    86→    case 'rejected': return `${u} was too late — #${ev.slot} already taken`;
+    87→    case 'duplicate': return `${u} already holds slot #${ev.slot}`;
+    88→    case 'invalid': return `${u} typed "${ev.comment || '?'}" — not a valid slot`;
+    89→    case 'gift': return `${u} sent ${ev.giftName || 'a gift'} ×${ev.repeatCount || 1}`;
+    90→    case 'join': return `${u} joined the stream`;
+    91→    case 'released': return `Slot #${ev.slot} was released`;
+    92→    case 'grid-full': return `Grid complete! Round ${ev.round} — auto-reset in 6s`;
+    93→    case 'reset': return `Round ${ev.round} started — grid is open`;
+    94→    case 'chat': return `${u}: "${ev.comment || ''}"`;
+    95→    default: return ev.type;
+    96→  }
+    97→}
+    98→
+    99→const BURST_NAMES = ['nova_rush', 'pixelpanda', 'moon_moth', 'turbo_-t', 'echo_fox', 'lil_comet', 'volt_vicky', 'dr_drip', 'kiwi_krush', 'astro_ace'];
+   100→
+   101→export default function Home() {
+   102→  const { toast } = useToast();
+   103→  const socketRef = useRef<Socket | null>(null);
+   104→
+   105→  const [connected, setConnected] = useState(false);
+   106→  const [state, setState] = useState<GameState | null>(null);
+   107→  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
+   108→  const [events, setEvents] = useState<ActivityEvent[]>([]);
+   109→  const [adminKey, setAdminKey] = useState('');
+   110→  const [simOn, setSimOn] = useState(false);
+   111→  const [injUser, setInjUser] = useState('');
+   112→  const [injNum, setInjNum] = useState('');
+   113→  const [injGift, setInjGift] = useState('Rose');
+   114→  const [injGiftCount, setInjGiftCount] = useState(1);
+   115→  const [busy, setBusy] = useState(false);
+   116→
+   117→  /* admin key (persisted) */
+   118→  useEffect(() => {
+   119→    let k: string | null = null;
+   120→    try { k = localStorage.getItem('lgl_admin_key'); } catch { /* blocked */ }
+   121→    setAdminKey(k || 'sandbox-admin');
+   122→  }, []);
+   123→  const saveKey = (v: string) => {
+   124→    setAdminKey(v);
+   125→    try { localStorage.setItem('lgl_admin_key', v); } catch { /* blocked */ }
+   126→  };
+   127→
+   128→  /* ── socket + polling ────────────────────────────────────────────── */
+   129→  useEffect(() => {
+   130→    const socket = io(`/?XTransformPort=${GAME_PORT}`, {
+   131→      transports: ['websocket', 'polling'],
+   132→      reconnection: true,
+   133→      reconnectionAttempts: Infinity,
+   134→      timeout: 10000,
+   135→    });
+   136→    socketRef.current = socket;
+   137→
+   138→    socket.on('connect', () => setConnected(true));
+   139→    socket.on('disconnect', () => setConnected(false));
+   140→    socket.on('connect_error', () => setConnected(false));
+   141→    socket.on('state', (s: unknown) => setState(s as GameState));
+   142→    socket.on('server', (s: unknown) => {
+   143→      const info = s as ServerInfo;
+   144→      setServerInfo(info);
+   145→      setSimOn(Boolean(info.simulator?.enabled));
+   146→    });
+   147→    socket.on('activity', (ev: unknown) => {
+   148→      const e = ev as ActivityEvent;
+   149→      setEvents((prev) => [e, ...prev].slice(0, 80));
+   150→    });
+   151→
+   152→    return () => { socket.disconnect(); socketRef.current = null; };
+   153→  }, []);
+   154→
+   155→  const pollStatus = useCallback(async () => {
+   156→    try {
+   157→      const r = await fetch(API('status'));
+   158→      const j = await r.json();
+   159→      setServerInfo(j as ServerInfo);
+   160→      setSimOn(Boolean(j.simulator?.enabled));
+   161→    } catch { /* server briefly down */ }
+   162→  }, []);
+   163→  useEffect(() => {
+   164→    pollStatus();
+   165→    const t = setInterval(pollStatus, 5000);
+   166→    return () => clearInterval(t);
+   167→  }, [pollStatus]);
+   168→
+   169→  /* ── API helpers ─────────────────────────────────────────────────── */
+   170→  const apiCall = useCallback(
+   171→    async (path: string, body: Record<string, unknown>, needsKey = true) => {
+   172→      const headers: Record<string, string> = { 'content-type': 'application/json' };
+   173→      if (needsKey) headers['x-admin-key'] = adminKey;
+   174→      const r = await fetch(API(path), { method: 'POST', headers, body: JSON.stringify(body) });
+   175→      const j = await r.json();
+   176→      if (!r.ok || j.ok === false) throw new Error(j.message || j.error || `HTTP ${r.status}`);
+   177→      return j;
+   178→    },
+   179→    [adminKey],
+   180→  );
+   181→
+   182→  const resetRound = async () => {
+   183→    if (!window.confirm('Flush all locks and start a new round?')) return;
+   184→    setBusy(true);
+   185→    try {
+   186→      const j = await apiCall('reset', { source: 'control-center' });
+   187→      toast({ title: `Round ${j.round} started`, description: 'All slots unlocked, grid is open.' });
+   188→    } catch (e) {
+   189→      toast({ title: 'Reset failed', description: e instanceof Error ? e.message : 'unknown error', variant: 'destructive' });
+   190→    } finally { setBusy(false); }
+   191→  };
+   192→
+   193→  const toggleSim = async (enabled: boolean) => {
+   194→    setBusy(true);
+   195→    try {
+   196→      await apiCall('admin/sim', { enabled });
+   197→      setSimOn(enabled);
+   198→      toast({ title: enabled ? 'Simulator running' : 'Simulator stopped', description: enabled ? 'Fake viewers will claim slots every few seconds.' : undefined });
+   199→    } catch (e) {
+   200→      setSimOn(!enabled);
+   201→      toast({ title: 'Could not toggle simulator', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+   202→    } finally { setBusy(false); }
+   203→  };
+   204→
+   205→  const injectClaim = async () => {
+   206→    const comment = injNum.trim();
+   207→    if (!comment) { toast({ title: 'Type a slot number first' }); return; }
+   208→    try {
+   209→      const j = await apiCall('simulate/chat', { username: injUser.trim() || undefined, comment }, false);
+   210→      toast({ title: `Claimed slot #${j.slot}`, description: `as @${j.entry.uniqueId}` });
+   211→      setInjNum('');
+   212→    } catch (e) {
+   213→      toast({ title: 'Claim rejected', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+   214→    }
+   215→  };
+   216→
+   217→  const injectGift = async () => {
+   218→    try {
+   219→      await apiCall('simulate/gift', {
+   220→        username: injUser.trim() || undefined,
+   221→        giftName: injGift.trim() || 'Rose',
+   222→        count: Math.max(1, Number(injGiftCount) || 1),
+   223→      }, false);
+   224→      toast({ title: `🎁 ${injGift} ×${injGiftCount} sent` });
+   225→    } catch (e) {
+   226→      toast({ title: 'Gift failed', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+   227→    }
+   228→  };
+   229→
+   230→  const burstViewers = async () => {
+   231→    if (!state) return;
+   232→    const free = state.slots.filter((s) => !s.userId).map((s) => s.slot);
+   233→    const picks = free.sort(() => Math.random() - 0.5).slice(0, 5);
+   234→    if (!picks.length) { toast({ title: 'Grid is already full' }); return; }
+   235→    setBusy(true);
+   236→    for (let i = 0; i < picks.length; i++) {
+   237→      try {
+   238→        await apiCall('simulate/chat', { username: BURST_NAMES[(state.round + i) % BURST_NAMES.length], comment: String(picks[i]) }, false);
+   239→      } catch { /* keep going */ }
+   240→      await new Promise((r) => setTimeout(r, 350));
+   241→    }
+   242→    setBusy(false);
+   243→  };
+   244→
+   245→  const releaseSlot = async (slot: number) => {
+   246→    if (!window.confirm(`Release slot #${slot}?`)) return;
+   247→    try {
+   248→      await apiCall('admin/release', { slot });
+   249→      toast({ title: `Slot #${slot} released` });
+   250→    } catch (e) {
+   251→      toast({ title: 'Release failed', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+   252→    }
+   253→  };
+   254→
+   255→  const copyObsUrl = async () => {
+   256→    const url = `${window.location.origin}/?XTransformPort=${GAME_PORT}`;
+   257→    try {
+   258→      await navigator.clipboard.writeText(url);
+   259→      toast({ title: 'OBS URL copied', description: url });
+   260→    } catch {
+   261→      toast({ title: 'Copy manually', description: url });
+   262→    }
+   263→  };
+   264→
+   265→  /* ── scaled phone preview ────────────────────────────────────────── */
+   266→  const phoneRef = useRef<HTMLDivElement>(null);
+   267→  const [phoneScale, setPhoneScale] = useState(0.3);
+   268→  useEffect(() => {
+   269→    const el = phoneRef.current;
+   270→    if (!el) return;
+   271→    const ro = new ResizeObserver(() => setPhoneScale(el.clientWidth / 1080));
+   272→    ro.observe(el);
+   273→    return () => ro.disconnect();
+   274→  }, []);
+   275→
+   276→  /* ── derived ─────────────────────────────────────────────────────── */
+   277→  const mode = serverInfo?.mode ?? '…';
+   278→  const claimed = state?.claimedCount ?? 0;
+   279→  const total = state?.totalSlots ?? 10;
+   280→  const elapsed = useMemo(() => {
+   281→    if (!state?.roundStartedAt) return '00:00';
+   282→    const s = Math.max(0, Math.floor((Date.now() - state.roundStartedAt) / 1000));
+   283→    return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+   284→    // re-computed on state changes; good enough for the header chip
+   285→  }, [state]);
+   286→
+   287→  return (
+   288→    <div className="min-h-screen flex flex-col bg-[#07070d] text-zinc-100"
+   289→      style={{ backgroundImage: 'radial-gradient(900px 480px at -10% -10%, rgba(37,244,238,0.10), transparent 60%), radial-gradient(900px 560px at 110% 110%, rgba(254,44,85,0.10), transparent 60%)' }}>
+   290→
+   291→      {/* ── top bar ── */}
+   292→      <header className="sticky top-0 z-40 border-b border-white/10 bg-[#07070d]/85 backdrop-blur">
+   293→        <div className="max-w-6xl mx-auto px-4 py-3 flex flex-wrap items-center gap-3">
+   294→          <div className="flex items-center gap-3 min-w-0">
+   295→            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#25f4ee] to-[#fe2c55] grid place-items-center shrink-0">
+   296→              <Lock className="w-5 h-5 text-black" />
+   297→            </div>
+   298→            <div className="min-w-0">
+   299→              <h1 className="font-extrabold text-lg leading-tight truncate">Locked Grid Lottery</h1>
+   300→              <p className="text-xs text-zinc-400 -mt-0.5">TikTok LIVE interactive game · control center</p>
+   301→            </div>
+   302→          </div>
+   303→          <div className="ml-auto flex items-center gap-2 flex-wrap">
+   304→            <Badge variant="outline" className={connected ? 'border-emerald-500/50 text-emerald-400' : 'border-red-500/50 text-red-400'}>
+   305→              <span className={`w-2 h-2 rounded-full mr-1.5 ${connected ? 'bg-emerald-400' : 'bg-red-500 animate-pulse'}`} />
+   306→              {connected ? 'socket live' : 'offline'}
+   307→            </Badge>
+   308→            <Badge variant="outline" className={mode === 'LIVE' ? 'border-emerald-500/50 text-emerald-400' : 'border-amber-500/50 text-amber-400'}>
+   309→              <Radio className="w-3 h-3 mr-1" /> {mode === 'LIVE' ? 'LIVE on TikTok' : 'simulation'}
+   310→            </Badge>
+   311→            <Badge variant="outline" className="border-cyan-500/40 text-cyan-300">Round {state?.round ?? '—'}</Badge>
+   312→          </div>
+   313→        </div>
+   314→      </header>
+   315→
+   316→      {/* ── main ── */}
+   317→      <main className="flex-1 w-full max-w-6xl mx-auto px-4 py-6 grid lg:grid-cols-[380px_1fr] gap-6 items-start">
+   318→
+   319→        {/* left: phone preview */}
+   320→        <section className="flex flex-col gap-4 lg:sticky lg:top-20">
+   321→          <div ref={phoneRef}
+   322→            className="relative mx-auto w-full max-w-[340px] rounded-[30px] border-[6px] border-zinc-800 bg-black overflow-hidden shadow-[0_0_60px_rgba(37,244,238,0.12)]"
+   323→            style={{ height: phoneScale ? undefined : 600 }}>
+   324→            <div style={{ width: 1080, height: 1920, transform: `scale(${phoneScale})`, transformOrigin: 'top left', height: 1920 * phoneScale }}>
+   325→              <iframe
+   326→                src={`/?XTransformPort=${GAME_PORT}`}
+   327→                title="OBS overlay preview"
+   328→                className="border-0 bg-black"
+   329→                style={{ width: 1080, height: 1920 }}
+   330→              />
+   331→            </div>
+   332→          </div>
+   333→
+   334→          <div className="grid grid-cols-2 gap-2 max-w-[340px] mx-auto w-full">
+   335→            <Button asChild variant="outline" className="border-white/15 hover:bg-white/10">
+   336→              <a href={`/?XTransformPort=${GAME_PORT}`} target="_blank" rel="noreferrer">
+   337→                <ExternalLink className="w-4 h-4 mr-1.5" /> Overlay
+   338→              </a>
+   339→            </Button>
+   340→            <Button asChild variant="outline" className="border-white/15 hover:bg-white/10">
+   341→              <a href={`/admin.html?XTransformPort=${GAME_PORT}`} target="_blank" rel="noreferrer">
+   342→                <MonitorSmartphone className="w-4 h-4 mr-1.5" /> Admin
+   343→              </a>
+   344→            </Button>
+   345→            <Button variant="secondary" className="col-span-2 bg-gradient-to-r from-[#25f4ee] to-[#0fb9b3] text-black font-bold hover:opacity-90" onClick={copyObsUrl}>
+   346→              <Copy className="w-4 h-4 mr-1.5" /> Copy OBS Browser-Source URL
+   347→            </Button>
+   348→          </div>
+   349→
+   350→          <p className="text-xs text-zinc-500 text-center max-w-[340px] mx-auto leading-relaxed">
+   351→            The phone above renders the real 1080×1920 overlay, scaled down. What you see is exactly what OBS captures.
+   352→          </p>
+   353→        </section>
+   354→
+   355→        {/* right: controls */}
+   356→        <section className="flex flex-col gap-6 min-w-0">
+   357→
+   358→          {/* round controls */}
+   359→          <Card className="bg-white/[0.04] border-white/10">
+   360→            <CardHeader className="pb-3">
+   361→              <CardTitle className="flex items-center gap-2 text-base">
+   362→                <Timer className="w-4 h-4 text-[#25f4ee]" /> Round controls
+   363→              </CardTitle>
+   364→              <CardDescription className="text-zinc-400">
+   365→                Round {state?.round ?? '—'} · {claimed}/{total} slots claimed · elapsed {elapsed}
+   366→                {state?.completedRounds ? ` · ${state.completedRounds} completed rounds` : ''}
+   367→              </CardDescription>
+   368→            </CardHeader>
+   369→            <CardContent className="space-y-4">
+   370→              {/* slot mirror */}
+   371→              <div className="grid grid-cols-10 gap-1.5">
+   372→                {(state?.slots ?? Array.from({ length: 10 }, (_, i) => ({ slot: i + 1, locked: false }))).map((s) => (
+   373→                  s.userId ? (
+   374→                    <button key={s.slot} onClick={() => releaseSlot(s.slot)}
+   375→                      title={`@${s.uniqueId} — click to release`}
+   376→                      className="rounded-lg py-1.5 text-xs font-extrabold bg-[#fe2c55]/20 border border-[#fe2c55]/60 text-[#ff9db1] hover:bg-[#fe2c55]/30 transition-colors">
+   377→                      {(s.nickname || s.uniqueId || '?').charAt(0).toUpperCase()}
+   378→                    </button>
+   379→                  ) : (
+   380→                    <div key={s.slot} title="open"
+   381→                      className="rounded-lg py-1.5 text-xs font-extrabold text-center border border-cyan-400/30 text-cyan-300 bg-cyan-400/5">
+   382→                      {s.slot}
+   383→                    </div>
+   384→                  )
+   385→                ))}
+   386→              </div>
+   387→
+   388→              <div className="flex flex-wrap items-center gap-3">
+   389→                <Button variant="destructive" onClick={resetRound} disabled={busy} className="bg-[#fe2c55] hover:bg-[#e02048] font-bold">
+   390→                  <RotateCcw className="w-4 h-4 mr-1.5" /> Reset round
+   391→                </Button>
+   392→                <div className="flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5">
+   393→                  <Zap className={`w-4 h-4 ${simOn ? 'text-amber-400' : 'text-zinc-500'}`} />
+   394→                  <span className="text-sm font-semibold text-zinc-300">auto-sim viewers</span>
+   395→                  <Switch checked={simOn} onCheckedChange={toggleSim} disabled={busy} />
+   396→                </div>
+   397→                <Button variant="outline" onClick={burstViewers} disabled={busy} className="border-white/15 hover:bg-white/10">
+   398→                  <Users className="w-4 h-4 mr-1.5" /> Burst: 5 fake viewers
+   399→                </Button>
+   400→              </div>
+   401→
+   402→              {state && (
+   403→                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+   404→                  {[
+   405→                    ['claims', state.stats.claims],
+   406→                    ['slot-taken', state.stats.rejectedTaken],
+   407→                    ['dupes', state.stats.rejectedDuplicate],
+   408→                    ['gifts', state.stats.gifts],
+   409→                  ].map(([label, v]) => (
+   410→                    <div key={label as string} className="rounded-lg bg-white/[0.04] border border-white/10 py-2">
+   411→                      <div className="text-lg font-extrabold text-cyan-300">{v as number}</div>
+   412→                      <div className="text-[11px] uppercase tracking-wider text-zinc-500">{label as string}</div>
+   413→                    </div>
+   414→                  ))}
+   415→                </div>
+   416→              )}
+   417→
+   418→              <Separator className="bg-white/10" />
+   419→              <div className="flex items-center gap-2 flex-wrap">
+   420→                <Server className="w-4 h-4 text-zinc-500" />
+   421→                <span className="text-xs text-zinc-500">admin key</span>
+   422→                <Input value={adminKey} onChange={(e) => saveKey(e.target.value)} type="password"
+   423→                  className="h-8 w-40 bg-white/5 border-white/10 text-xs" />
+   424→                <span className="text-xs text-zinc-600">sent as <code className="text-zinc-400">x-admin-key</code></span>
+   425→              </div>
+   426→            </CardContent>
+   427→          </Card>
+   428→
+   429→          {/* test console */}
+   430→          <Card className="bg-white/[0.04] border-white/10">
+   431→            <CardHeader className="pb-3">
+   432→              <CardTitle className="flex items-center gap-2 text-base">
+   433→                <FlaskConical className="w-4 h-4 text-[#fe2c55]" /> Test console
+   434→              </CardTitle>
+   435→              <CardDescription className="text-zinc-400">
+   436→                Injects synthetic chat &amp; gift events through the same pipeline TikTok messages use.
+   437→              </CardDescription>
+   438→            </CardHeader>
+   439→            <CardContent className="space-y-3">
+   440→              <div className="flex flex-wrap gap-2">
+   441→                <Input value={injUser} onChange={(e) => setInjUser(e.target.value)} placeholder="viewer username (optional)"
+   442→                  className="flex-1 min-w-[140px] bg-white/5 border-white/10" />
+   443→                <Input value={injNum} onChange={(e) => setInjNum(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && injectClaim()}
+   444→                  placeholder="slot # (e.g. 7)" inputMode="numeric" className="w-32 bg-white/5 border-white/10" />
+   445→                <Button onClick={injectClaim} className="bg-[#25f4ee] text-black font-bold hover:bg-[#1fd9d3]">Claim</Button>
+   446→              </div>
+   447→              <div className="flex flex-wrap gap-2">
+   448→                <Input value={injGift} onChange={(e) => setInjGift(e.target.value)} placeholder="gift name"
+   449→                  className="flex-1 min-w-[140px] bg-white/5 border-white/10" />
+   450→                <Input type="number" min={1} value={injGiftCount} onChange={(e) => setInjGiftCount(Number(e.target.value))}
+   451→                  className="w-24 bg-white/5 border-white/10" />
+   452→                <Button onClick={injectGift} variant="outline" className="border-amber-400/40 text-amber-300 hover:bg-amber-400/10">
+   453→                  <Gift className="w-4 h-4 mr-1.5" /> Send gift
+   454→                </Button>
+   455→              </div>
+   456→            </CardContent>
+   457→          </Card>
+   458→
+   459→          {/* event log */}
+   460→          <Card className="bg-white/[0.04] border-white/10">
+   461→            <CardHeader className="pb-3">
+   462→              <CardTitle className="flex items-center gap-2 text-base">
+   463→                <Radio className="w-4 h-4 text-cyan-300" /> Live event log
+   464→                <Badge variant="outline" className="ml-auto border-white/15 text-zinc-400">{events.length}</Badge>
+   465→              </CardTitle>
+   466→            </CardHeader>
+   467→            <CardContent>
+   468→              <ScrollArea className="h-64 pr-3">
+   469→                {events.length === 0 ? (
+   470→                  <p className="text-sm text-zinc-500 py-8 text-center">Waiting for activity… turn on auto-sim or send a test claim.</p>
+   471→                ) : (
+   472→                  <div className="space-y-1.5">
+   473→                    {events.map((ev) => (
+   474→                      <div key={ev.id} className="flex items-start gap-2.5 rounded-lg bg-white/[0.03] border border-white/5 px-3 py-2">
+   475→                        <span className="text-sm leading-5">{EVENT_ICONS[ev.type] ?? '•'}</span>
+   476→                        <span className="text-[13px] leading-5 text-zinc-300 flex-1">{describeEvent(ev)}</span>
+   477→                        <span className="text-[11px] text-zinc-600 font-mono pt-0.5">
+   478→                          {new Date(ev.at).toLocaleTimeString('en-GB', { hour12: false })}
+   479→                        </span>
+   480→                      </div>
+   481→                    ))}
+   482→                  </div>
+   483→                )}
+   484→              </ScrollArea>
+   485→            </CardContent>
+   486→          </Card>
+   487→        </section>
+   488→      </main>
+   489→
+   490→      {/* ── setup guide ── */}
+   491→      <section className="w-full max-w-6xl mx-auto px-4 pb-8">
+   492→        <Card className="bg-white/[0.04] border-white/10">
+   493→          <CardHeader>
+   494→            <CardTitle className="text-base">🚀 Deployment guide</CardTitle>
+   495→            <CardDescription className="text-zinc-400">
+   496→              The whole game lives in the <code className="text-zinc-300">locked-grid-lottery/</code> folder — a self-contained Node.js project you can drop onto any VPS.
+   497→            </CardDescription>
+   498→          </CardHeader>
+   499→          <CardContent>
+   500→            <Accordion type="single" collapsible className="w-full">
+   501→              <AccordionItem value="vps" className="border-white/10">
+   502→                <AccordionTrigger className="text-sm font-semibold">1 · Run the server on your VPS</AccordionTrigger>
+   503→                <AccordionContent className="text-sm text-zinc-300 space-y-2">
+   504→                  <pre className="rounded-lg bg-black/60 border border-white/10 p-3 text-xs overflow-x-auto leading-6">
+   505→{`# on the VPS (Node 18+)
+   506→cd locked-grid-lottery
+   507→npm install
+   508→cp .env.example .env      # edit: PORT, ADMIN_KEY, TIKTOK_USERNAME…
+   509→node server.js            # production: pm2 start server.js --name lottery
+   510→
+   511→# overlay  ->  http://YOUR_VPS_IP:3000/
+   512→# admin    ->  http://YOUR_VPS_IP:3000/admin.html`}
+   513→                  </pre>
+   514→                  <p className="text-zinc-400">Open <b>3000/tcp</b> in your Oracle Cloud security list / firewall, or put Nginx/Caddy in front with TLS.</p>
+   515→                </AccordionContent>
+   516→              </AccordionItem>
+   517→              <AccordionItem value="tiktok" className="border-white/10">
+   518→                <AccordionTrigger className="text-sm font-semibold">2 · Connect TikTok LIVE chat</AccordionTrigger>
+   519→                <AccordionContent className="text-sm text-zinc-300 space-y-2">
+   520→                  <ul className="list-disc pl-5 space-y-1.5 text-zinc-400">
+   521→                    <li>Set <code className="text-zinc-300">TIKTOK_USERNAME</code> (without @) to the account that is <b>currently live</b>, then restart the server.</li>
+   522→                    <li>Set <code className="text-zinc-300">SIMULATE=0</code> to disable demo endpoints in production, and change <code className="text-zinc-300">ADMIN_KEY</code>.</li>
+   523→                    <li>The connector uses TikTok&apos;s unofficial WebSocket API — if the stream is offline or TikTok changes its protocol the server retries with backoff and logs the reason. Rehearse with <code className="text-zinc-300">SIMULATE=1</code>.</li>
+   524→                    <li>Every comment is parsed with <code className="text-zinc-300">{'^#?\\d{1,3}$'}</code> — only bare numbers claim slots, everything else is ignored.</li>
+   525→                  </ul>
+   526→                </AccordionContent>
+   527→              </AccordionItem>
+   528→              <AccordionItem value="obs" className="border-white/10">
+   529→                <AccordionTrigger className="text-sm font-semibold">3 · Add the overlay to OBS</AccordionTrigger>
+   530→                <AccordionContent className="text-sm text-zinc-300 space-y-2">
+   531→                  <ul className="list-disc pl-5 space-y-1.5 text-zinc-400">
+   532→                    <li>Sources → <b>Browser</b> → URL <code className="text-zinc-300">http://YOUR_VPS_IP:3000/</code></li>
+   533→                    <li>Width <b>1080</b>, Height <b>1920</b> (matches the canvas — the preview here is the same page scaled down).</li>
+   534→                    <li>Untick &quot;Shutdown source when not visible&quot; and &quot;Refresh browser when scene becomes active&quot;.</li>
+   535→                    <li>Sound: the 🔊 toggle on the overlay plays a chime on every new lock (persisted per browser). Add <code className="text-zinc-300">?sound=1</code> to force it on.</li>
+   536→                    <li>Host hotkey: focus the overlay browser source and press <b>Shift+R</b> to reset the round (loads the key from <code className="text-zinc-300">?key=…</code> or localStorage).</li>
+   537→                  </ul>
+   538→                </AccordionContent>
+   539→              </AccordionItem>
+   540→              <AccordionItem value="api" className="border-white/10">
+   541→                <AccordionTrigger className="text-sm font-semibold">4 · HTTP API &amp; realtime events</AccordionTrigger>
+   542→                <AccordionContent className="text-sm text-zinc-300 space-y-2">
+   543→                  <pre className="rounded-lg bg-black/60 border border-white/10 p-3 text-xs overflow-x-auto leading-6">
+   544→{`GET  /api/status              health + mode + tiktok/simulator info
+   545→GET  /api/state               full game-state snapshot
+   546→POST /api/reset               [x-admin-key] flush locks, next round
+   547→POST /api/admin/claim         [x-admin-key] { slot, username }
+   548→POST /api/admin/release       [x-admin-key] { slot }
+   549→POST /api/admin/sim           [x-admin-key] { enabled }
+   550→POST /api/simulate/chat       { username, comment }   (SIMULATE=1 only)
+   551→POST /api/simulate/gift       { username, giftName, count }
+   552→
+   553→socket.io:  state · slot-locked · slot-released · round-reset · activity`}
+   554→                  </pre>
+   555→                </AccordionContent>
+   556→              </AccordionItem>
+   557→            </Accordion>
+   558→          </CardContent>
+   559→        </Card>
+   560→      </section>
+   561→
+   562→      {/* ── footer ── */}
+   563→      <footer className="mt-auto border-t border-white/10 bg-black/40">
+   564→        <div className="max-w-6xl mx-auto px-4 py-5 flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-500">
+   565→          <span>🔒 Locked Grid Lottery v1.0 — Node.js · Express · socket.io · tiktok-live-connector</span>
+   566→          <span className="font-mono">locked-grid-lottery/ → server.js · src/{'{config,gameState,tiktok,simulator}'}.js · public/overlay</span>
+   567→        </div>
+   568→      </footer>
+   569→    </div>
+   570→  );
+   571→}
+   572→

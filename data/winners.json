@@ -1,0 +1,248 @@
+{
+ "version": 1,
+ "savedAt": 1793480631657,
+ "winners": [
+  {
+   "round": 1,
+   "slot": 6,
+   "userId": "sim_mojo#3",
+   "uniqueId": "sim_mojo_1",
+   "nickname": "MojoM4ster",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793477386669,
+   "source": "auto"
+  },
+  {
+   "round": 2,
+   "slot": 7,
+   "userId": "sim_otto#31",
+   "uniqueId": "sim_otto_2",
+   "nickname": "OttoOverdrive",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793477532896,
+   "source": "auto"
+  },
+  {
+   "round": 3,
+   "slot": 2,
+   "userId": "sim_lulu#78",
+   "uniqueId": "sim_lulu_5",
+   "nickname": "LuluLive",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793477690825,
+   "source": "auto"
+  },
+  {
+   "round": 1,
+   "slot": 8,
+   "userId": "sim_kiki#4",
+   "uniqueId": "sim_kiki_1",
+   "nickname": "KikiKaboom",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793477944359,
+   "source": "auto"
+  },
+  {
+   "round": 2,
+   "slot": 2,
+   "userId": "sim_vex#45",
+   "uniqueId": "sim_vex_3",
+   "nickname": "VexVolt",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793478053943,
+   "source": "auto"
+  },
+  {
+   "round": 3,
+   "slot": 6,
+   "userId": "sim_mojo#75",
+   "uniqueId": "sim_mojo_5",
+   "nickname": "MojoM4ster",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793478235135,
+   "source": "auto"
+  },
+  {
+   "round": 4,
+   "slot": 7,
+   "userId": "sim_ghost#151",
+   "uniqueId": "sim_ghost_9",
+   "nickname": "GlitchGhost",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793478493234,
+   "source": "auto"
+  },
+  {
+   "round": 1,
+   "slot": 10,
+   "userId": "sim_pix3l#1",
+   "uniqueId": "sim_pix3l_1",
+   "nickname": "Pix3lPirate",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793478801242,
+   "source": "auto"
+  },
+  {
+   "round": 2,
+   "slot": 1,
+   "userId": "sim_mira#64",
+   "uniqueId": "sim_mira_4",
+   "nickname": "MiraMyth",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793478920654,
+   "source": "auto"
+  },
+  {
+   "round": 3,
+   "slot": 8,
+   "userId": "sim_mojo#93",
+   "uniqueId": "sim_mojo_6",
+   "nickname": "MojoM4ster",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479013673,
+   "source": "auto"
+  },
+  {
+   "round": 4,
+   "slot": 5,
+   "userId": "sim_nova#126",
+   "uniqueId": "sim_nova_8",
+   "nickname": "Neon Nova",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479142688,
+   "source": "auto"
+  },
+  {
+   "round": 5,
+   "slot": 3,
+   "userId": "sim_jax#173",
+   "uniqueId": "sim_jax_10",
+   "nickname": "JaxJolt",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479221840,
+   "source": "auto"
+  },
+  {
+   "round": 6,
+   "slot": 5,
+   "userId": "sim_rune#213",
+   "uniqueId": "sim_rune_12",
+   "nickname": "RuneRush",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479437897,
+   "source": "auto"
+  },
+  {
+   "round": 7,
+   "slot": 4,
+   "userId": "sim_rex#257",
+   "uniqueId": "sim_rex_15",
+   "nickname": "RexRiot",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479591860,
+   "source": "auto"
+  },
+  {
+   "round": 8,
+   "slot": 5,
+   "userId": "sim_pip#302",
+   "uniqueId": "sim_pip_17",
+   "nickname": "PipPixel",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479718869,
+   "source": "auto"
+  },
+  {
+   "round": 9,
+   "slot": 8,
+   "userId": "sim_pix3l#343",
+   "uniqueId": "sim_pix3l_20",
+   "nickname": "Pix3lPirate",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479807638,
+   "source": "auto"
+  },
+  {
+   "round": 10,
+   "slot": 10,
+   "userId": "sim_suki#376",
+   "uniqueId": "sim_suki_21",
+   "nickname": "SukiStorm",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793479963485,
+   "source": "auto"
+  },
+  {
+   "round": 11,
+   "slot": 9,
+   "userId": "sim_zara#434",
+   "uniqueId": "sim_zara_25",
+   "nickname": "ZaraZaps",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793480079325,
+   "source": "auto"
+  },
+  {
+   "round": 12,
+   "slot": 7,
+   "userId": "sim_kiki#472",
+   "uniqueId": "sim_kiki_27",
+   "nickname": "KikiKaboom",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793480203906,
+   "source": "auto"
+  },
+  {
+   "round": 13,
+   "slot": 10,
+   "userId": "sim_taz#503",
+   "uniqueId": "sim_taz_28",
+   "nickname": "TazTurbine",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793480342135,
+   "source": "auto"
+  },
+  {
+   "round": 14,
+   "slot": 5,
+   "userId": "sim_pix3l#559",
+   "uniqueId": "sim_pix3l_32",
+   "nickname": "Pix3lPirate",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793480455726,
+   "source": "auto"
+  },
+  {
+   "round": 15,
+   "slot": 6,
+   "userId": "sim_pip#590",
+   "uniqueId": "sim_pip_33",
+   "nickname": "PipPixel",
+   "profilePictureUrl": null,
+   "_hue": null,
+   "wonAt": 1793480631657,
+   "source": "auto"
+  }
+ ]
+}
